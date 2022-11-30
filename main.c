@@ -44,13 +44,14 @@ typedef struct {
 
 
 
+
 //global vars
-int modo;
 int partition;
 int operation;
+int modo;
+FILE *input;
 MATRIX matrixA;
 MATRIX matrixB;
-
 
 
 
@@ -91,28 +92,30 @@ void printMatrix(matrix m, int rank){
 
 
 //to review
-void SumMatrixMaster(matrix mA, matrix mB, int rank){
-    matrix result;
-    if(mode == VERBOSE || rank == MASTER){
-        for(int i = 0; i < mA.rows; i++){
-            for(int j = 0; j < mA.cols; j++){
-                result.data[i][j] = mA.data[i][j] + mB.data[i][j];
-            }
-        }
-        printMatrix(result, mode, rank);
-    }
-    else if(mode == SILENT){
-        for(int i = 0; i < mA.rows; i++){
-            for(int j = 0; j < mA.cols; j++){
-                result.data[i][j] = mA.data[i][j] + mB.data[i][j];
-            }
-        }
-        return result;
-    }
-}
+// void SumMatrixMaster(matrix mA, matrix mB, int rank){
+//     matrix result;
+//     if(mode == VERBOSE || rank == MASTER){
+//         for(int i = 0; i < mA.rows; i++){
+//             for(int j = 0; j < mA.cols; j++){
+//                 result.data[i][j] = mA.data[i][j] + mB.data[i][j];
+//             }
+//         }
+//         printMatrix(result, mode, rank);
+//     }
+//     else if(mode == SILENT){
+//         for(int i = 0; i < mA.rows; i++){
+//             for(int j = 0; j < mA.cols; j++){
+//                 result.data[i][j] = mA.data[i][j] + mB.data[i][j];
+//             }
+//         }
+//         return result;
+//     }
+// }
+
+
 
 // master and slave code
-void masterCode (FILE *file){
+void masterCode (){
         
     //create matrix A and get number of rows and cols
     matrixArows = fgetc(input);
@@ -174,7 +177,6 @@ void slaveCode(){
 //main
 void main (int argc, char *argv[]) {
     
-    FILE *input;
     input = stdin;
 
 
@@ -201,9 +203,12 @@ void main (int argc, char *argv[]) {
 
 
 
+
+
+
     // if (whoami == MASTER) {
     //     //master code
-    //     masterCode(input);    
+    //     masterCode();    
     // }
 
     // else {
