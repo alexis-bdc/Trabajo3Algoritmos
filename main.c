@@ -127,6 +127,8 @@ void main (int argc, char *argv[]) {
 
     //recibe file from bash arguments
     fp = fopen(argv[1], "r");
+
+    
     if (fp == NULL)
         exit(EXIT_FAILURE);
 
