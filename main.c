@@ -4,7 +4,7 @@
                     Florencia Cespedes
         Profesor:   Ruben Carvajal Schiaffino
         Entrega:    4 Diciembre 2022
-
+        compilacion
         Ejecucion: mpirun -np K ./t3.exe -p -o -m < data.txt
                 K: numero de nodos | numero de procesos
                 p: particion de matrices | como se reparten desde el archivo {H,V}
@@ -21,7 +21,6 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <pthread.h>
 #include <mpi.h>
 
 #define MASTER 0
@@ -38,23 +37,48 @@
 //structs
 
 typedef struct {
-    int rows;
-    int cols;
-    int **data;
-}matrix;
+    int nRows;
+    int nCols;
+    int** data;
+}MATRIX;
 
 
 
-//variables globales
 
-
-
+//global vars
+int partition;
+int operation;
+int modo;
+FILE *input;
+MATRIX matrixA;
+MATRIX matrixB;
 
 
 
 //funciones
 
-void printMatrix(matrix m, int mode, int rank){
+MATRIX * newMatrix(int rows, int cols){       //create new zero matrix
+    if (rows <= 0 || cols <= 0) return NULL;
+
+    // allocate a matrix structure
+    matrix * m = (matrix *) malloc(sizeof(matrix));
+
+    // set dimensions
+    m->nRows = rows;
+    m->nCols = cols;
+
+    // allocate a int array of length rows * cols
+    m->data = (int *) malloc(rows*cols*sizeof(int));
+    // set all data to 0
+    int i;
+    for (i = 0; i < rows*cols; i++)
+        m->data[i] = 0;
+    return m;
+}
+
+
+
+void printMatrix(matrix m, int rank){
     if(mode == VERBOSE || rank == MASTER){
         for(int i = 0; i < m.rows; i++){
             for(int j = 0; j < m.cols; j++){
@@ -68,41 +92,95 @@ void printMatrix(matrix m, int mode, int rank){
 
 
 //to review
-void SumMatrix(matrix mA, matrix mB, int mode, int rank){
-    matrix result;
-    if(mode == VERBOSE || rank == MASTER){
-        for(int i = 0; i < mA.rows; i++){
-            for(int j = 0; j < mA.cols; j++){
-                result.data[i][j] = mA.data[i][j] + mB.data[i][j];
-            }
+// void SumMatrixMaster(matrix mA, matrix mB, int rank){
+//     matrix result;
+//     if(mode == VERBOSE || rank == MASTER){
+//         for(int i = 0; i < mA.rows; i++){
+//             for(int j = 0; j < mA.cols; j++){
+//                 result.data[i][j] = mA.data[i][j] + mB.data[i][j];
+//             }
+//         }
+//         printMatrix(result, mode, rank);
+//     }
+//     else if(mode == SILENT){
+//         for(int i = 0; i < mA.rows; i++){
+//             for(int j = 0; j < mA.cols; j++){
+//                 result.data[i][j] = mA.data[i][j] + mB.data[i][j];
+//             }
+//         }
+//         return result;
+//     }
+// }
+
+
+
+// master and slave code
+void masterCode (){
+        
+    //create matrix A and get number of rows and cols
+    matrixArows = fgetc(input);
+    matrixAcolums = fgetc(input);
+    matrixA = newMatrix(matrixArows,matrixAcolums);
+
+
+    //create matrix B and get number of rows and cols
+    matrixBrows = fgetc(input);
+    matrixBcolums = fgetc(input);
+    matrixB = newMatrix(matrixBrows,matrixBcolums);
+
+    //get data from file to matrix A
+    for (i = 0; i< matrixArows; i++){
+        for (j = 0; j < matrixAcolums; j++){
+            matrixA.data[i][j] = fgetc(input);
         }
-        printMatrix(result, mode, rank);
     }
-    else if(mode == SILENT){
-        for(int i = 0; i < mA.rows; i++){
-            for(int j = 0; j < mA.cols; j++){
-                result.data[i][j] = mA.data[i][j] + mB.data[i][j];
-            }
+
+    //get data from file to matrix B
+    for (i = 0; i< matrixBrows; i++){
+        for (j = 0; j < matrixBcolums; j++){
+            matrixB.data[i][j] = fgetc(input);
         }
-        return result;
     }
+
+    
+
+    //send data to slaves
+    //receive data from slaves
+    //print data
+    
+
+
+}
+
+
+void slaveCode(){
+    //recibe data from master
+    
+    
+    //do operation
+    switch (operation)
+    {
+        case SUMA:
+            
+        break;
+        case MULTIPLICACION:
+
+        break;
+    }
+
+
+    //send data to master
 }
 
 
 
-
-
-
 //main
-
 void main (int argc, char *argv[]) {
-    FILE *fp;
-    char *line = NULL;
-    size_t len = 0;
-    ssize_t read;
+    
+    input = stdin;
 
-    //recibe particion de matrices
-    int partition = 0;
+
+    //recibe tipo particion de matrices
     if(argv[4] == 'H'){
         partition = HORIZONTAL;
     }else if(argv[4] == 'V'){
@@ -110,7 +188,6 @@ void main (int argc, char *argv[]) {
     }
 
     //recibe operacion a realizar
-    int operation = 0;
     if(argv[3] == 'S'){
         operation = SUMA;
     }else if(argv[3] == 'M'){
@@ -118,27 +195,33 @@ void main (int argc, char *argv[]) {
     }
 
     //recibe modo de ejecucion
-    int mode = 0;
     if(argv[2] == 'S'){
         mode = SILENT;
     }else if(argv[2] == 'V'){
         mode = VERBOSE;
     }
 
+<<<<<<< HEAD
     //recibe file from bash arguments
     fp = fopen(argv[1], "r");
 
     
     if (fp == NULL)
         exit(EXIT_FAILURE);
+=======
+>>>>>>> 7606dde5331b265c2e38c27f1552d2bee93240c1
 
 
 
-    //recibe dimensiones de matrices
-    int rowsA;
-    int colsA;
-    int rowsB;
-    int colsB;
 
 
+    // if (whoami == MASTER) {
+    //     //master code
+    //     masterCode();    
+    // }
+
+    // else {
+    //     //slave code
+    //     slaveCode();
+    // }
 }

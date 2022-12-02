@@ -49,7 +49,7 @@ void FromLeftNeighbour(int me)
   printf("[%d] message from %d = %d\n",me,status.MPI_SOURCE,message);
 }  
 
-      
+
 /*
  *
  */
