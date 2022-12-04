@@ -89,7 +89,7 @@ void sumaVert (int col, int rank){
     for (i = 0; i < matrixA->nRows; i++){
         buffer[i] = matrixA[i][col] + matrixB[i][col];
     }
-    MPI_Send(&buffer, 1, MPI_INT, MASTER, TAG, MPI_COMM_WORLD);
+    MPI_Send(&buffer, 1, MPI_INT, MASTER, TAG, MPI_COMM_WORLD, &status);
 }
 
 void sumaHoriz (int row, int rank){
@@ -98,7 +98,7 @@ void sumaHoriz (int row, int rank){
     for (i = 0; i < matrixA->nCols; i++){
         buffer[i] = matrixA[row][i] + matrixB[row][i];
     }
-    MPI_Send(&buffer, 1, MPI_INT, MASTER, TAG, MPI_COMM_WORLD);
+    MPI_Send(&buffer, 1, MPI_INT, MASTER, TAG, MPI_COMM_WORLD, &status);
 }
 
 void multVert (int col, int rank){
@@ -112,27 +112,6 @@ void multHoriz (int row, int rank){
 }
 
 
-
-//to review
-// void SumMatrixMaster(MATRIX mA, MATRIX mB, int rank){
-//     MATRIX result;
-//     if(mode == VERBOSE || rank == MASTER){
-//         for(int i = 0; i < mA.rows; i++){
-//             for(int j = 0; j < mA.cols; j++){
-//                 result.data[i][j] = mA.data[i][j] + mB.data[i][j];
-//             }
-//         }
-//         printMatrix(result, mode, rank);
-//     }
-//     else if(mode == SILENT){
-//         for(int i = 0; i < mA.rows; i++){
-//             for(int j = 0; j < mA.cols; j++){
-//                 result.data[i][j] = mA.data[i][j] + mB.data[i][j];
-//             }
-//         }
-//         return result;
-//     }
-// }
 
 
 
@@ -191,39 +170,39 @@ void masterCode (int me, int allwe, int whoami){
         printf("operation not valid\n");
     }
 
-    // MPI_Send();
 
 
     //receive data from slaves
     if (operation == SUMA){
-        if (partition == HORIZONTAL){
-            for (int i = 1; i < allwe; i++){
-                MPI_Send();
-                MPI_Recv();
+        int *buffer = (int*) malloc(matrixA->nRows * sizeof(int));
+        int index;
+        for (int i = 1, index = 0; i =< allwe && index < matrixAux->nRows; i++, index++){
+            MPI_Send(&index, 1, MPI_INT, i, TAG, MPI_COMM_WORLD, &status);
+            MPI_Recv(&buffer, 1, MPI_INT, i, TAG, MPI_COMM_WORLD, &status);
+            if (partition == HORIZONTAL){
+                for (int j = 0; j < matrixAux->nCols; j++){
+                    matrixAux->data[index][j] = buffer[j];
+                }
             }
-        }
-        else if (partition == VERTICAL){
-            for (int i = 1; i < allwe; i++){
-                MPI_Send();
-                MPI_Recv();
+            else if (partition == VERTICAL){
+                for (int j = 0; j < matrixAux->nRows; j++){
+                    matrixAux->data[j][index] = buffer[j];
+                }
             }
+            
+            if (i == allwe - 1) {i = 1;} //reset process iterator to initial value
         }
+        
+    } 
+       
+    else if (operation == MULTIPLICACION){
+        for (int i = 1; i < allwe; i++ ){
+            MPI_Send();
+        }
+
     }
 
-    else if (operation == MULTIPLICACION){
-        if (partition == HORIZONTAL){
-            for (int i = 1; i < allwe; i++){
-                MPI_Send();
-                MPI_Recv();
-            }
-        }
-        else if (partition == VERTICAL){
-            for (int i = 1; i < allwe; i++){
-                MPI_Send();
-                MPI_Recv();
-            }
-        }
-    }
+   
 
    
 
@@ -232,10 +211,10 @@ void masterCode (int me, int allwe, int whoami){
   
     if (mode == VERBOSE){
         printf("Matrix result:\n");
-        printMatrix(matrixA, MASTER);
+        printMatrix(matrixAux, whoami);
     }
     else if (mode == SILENT){
-        printMatrix(matrixA, MASTER);
+        printMatrix(matrixAux, whoami);
     }
     else{
         printf("mode not valid\n");
@@ -252,15 +231,28 @@ void slaveCode(int me, int allwe, int whoami){
     
 
     //do operation
-    switch (operation)
-    {
-        case SUMA:
-            
-        break;
-        case MULTIPLICACION:
-
-        break;
+    if (operation == SUMA){
+        if (partition == VERTICAL){
+            int column;
+            MPI_Recv(&column, 1, MPI_INT, MASTER, TAG, MPI_COMM_WORLD, &status);
+            sumaVert(column, whoami);
+        }
+        else if (partition == HORIZONTAL){
+            int row;
+            MPI_Recv(&row, 1, MPI_INT, MASTER, TAG, MPI_COMM_WORLD, &status);
+            sumaHoriz(row, whoami);
+        }
     }
+
+    else if (operation == MULTIPLICACION){
+        if (partition == VERTICAL){
+            multVert(column, whoami);
+        }
+        else if (partition == HORIZONTAL){
+            multHoriz(row, whoami);
+        }
+    }
+
 
 
     //send data to master
