@@ -54,7 +54,7 @@ FILE *input;
 MATRIX * matrixA;
 MATRIX * matrixB;
 MATRIX * matrixAux;
-
+MPI_Status status;
 
 //funciones
 
@@ -87,18 +87,18 @@ void sumaVert (int col, int rank){
     int i;
     int *buffer = (int*) malloc(matrixA->nRows * sizeof(int));
     for (i = 0; i < matrixA->nRows; i++){
-        buffer[i] = matrixA[i][col] + matrixB[i][col];
+        buffer[i] = matrixA->data[i][col] + matrixB->data[i][col];
     }
-    MPI_Send(&buffer, 1, MPI_INT, MASTER, TAG, MPI_COMM_WORLD, &status);
+    MPI_Send(&buffer, 1, MPI_INT, MASTER, TAG, MPI_COMM_WORLD);
 }
 
 void sumaHoriz (int row, int rank){
     int i;
     int *buffer = (int*) malloc(matrixA->nCols * sizeof(int));
     for (i = 0; i < matrixA->nCols; i++){
-        buffer[i] = matrixA[row][i] + matrixB[row][i];
+        buffer[i] = matrixA->data[row][i] + matrixB->data[row][i];
     }
-    MPI_Send(&buffer, 1, MPI_INT, MASTER, TAG, MPI_COMM_WORLD, &status);
+    MPI_Send(&buffer, 1, MPI_INT, MASTER, TAG, MPI_COMM_WORLD);
 }
 
 void multVert (int col, int rank){
@@ -176,8 +176,8 @@ void masterCode (int me, int allwe, int whoami){
     if (operation == SUMA){
         int *buffer = (int*) malloc(matrixA->nRows * sizeof(int));
         int index;
-        for (int i = 1, index = 0; i =< allwe && index < matrixAux->nRows; i++, index++){
-            MPI_Send(&index, 1, MPI_INT, i, TAG, MPI_COMM_WORLD, &status);
+        for (int i = 1, index = 0; i <= allwe && index < matrixAux->nRows; i++, index++){
+            MPI_Send(&index, 1, MPI_INT, i, TAG, MPI_COMM_WORLD);
             MPI_Recv(&buffer, 1, MPI_INT, i, TAG, MPI_COMM_WORLD, &status);
             if (partition == HORIZONTAL){
                 for (int j = 0; j < matrixAux->nCols; j++){
@@ -197,7 +197,7 @@ void masterCode (int me, int allwe, int whoami){
        
     else if (operation == MULTIPLICACION){
         for (int i = 1; i < allwe; i++ ){
-            MPI_Send();
+            
         }
 
     }
@@ -246,10 +246,10 @@ void slaveCode(int me, int allwe, int whoami){
 
     else if (operation == MULTIPLICACION){
         if (partition == VERTICAL){
-            multVert(column, whoami);
+            
         }
         else if (partition == HORIZONTAL){
-            multHoriz(row, whoami);
+            
         }
     }
 
