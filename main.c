@@ -1,19 +1,18 @@
 /*
         Trabajo 3 Algoritmos Distribuidos
-        Alumnos:    Alexis Bolados
-                    Florencia Cespedes
-        Profesor:   Ruben Carvajal Schiaffino
-        Entrega:    4 Diciembre 2022
-        compilacion
-        Ejecucion: mpirun -np K ./t3.exe -p -o -m < data.txt
-                K: numero de nodos | numero de procesos
-                p: particion de matrices | como se reparten desde el archivo {H,V}
-                o: operacion a realizar {S,M}
-                m: modo de ejecucion | silent or verbose {S,V}
-
+        Alumnos:        Alexis Bolados
+                        Florencia Cespedes
+        Profesor:       Ruben Carvajal Schiaffino
+        Entrega:        4 Diciembre 2022
+        compilacion:    mpicc main.c -o t3.exe
+        Ejecucion:      mpirun -np K ./t3.exe -p -o -m < data.txt
+                        K: numero de nodos | numero de procesos
+                        p: particion de matrices | como se reparten desde el archivo {H,V}
+                        o: operacion a realizar {S,M}
+                        m: modo de ejecucion | silent or verbose {S,V}
         Requerimientos:
-                algoritmos distribuido en memora privada, para operar matrices mapeadas en nodos
-                operaciones: [SUMA][], [MULTIPLICACION][]
+                        algoritmos distribuido en memora privada, para operar matrices mapeadas en nodos
+                        operaciones: [SUMA][], [MULTIPLICACION][]
 */
 
 //algoritmos distribuido que opera matrices
@@ -24,6 +23,7 @@
 #include <mpi.h>
 
 #define MASTER 0
+#define TAG 1
 
 #define SUMA 0
 #define MULTIPLICACION 1
@@ -48,41 +48,35 @@ typedef struct {
 //global vars
 int partition;
 int operation;
-int modo;
+int mode;
 FILE *input;
-MATRIX matrixA;
-MATRIX matrixB;
+MATRIX * matrixA;
+MATRIX * matrixB;
+MATRIX * matrixAux;
+MPI_Status status;
 
-
+int matrixArows, matrixAcolums, matrixBrows, matrixBcolums;
 
 //funciones
 
-MATRIX * newMatrix(int rows, int cols){       //create new zero matrix
-    if (rows <= 0 || cols <= 0) return NULL;
-
-    // allocate a matrix structure
-    matrix * m = (matrix *) malloc(sizeof(matrix));
-
-    // set dimensions
-    m->nRows = rows;
-    m->nCols = cols;
-
-    // allocate a int array of length rows * cols
-    m->data = (int *) malloc(rows*cols*sizeof(int));
-    // set all data to 0
-    int i;
-    for (i = 0; i < rows*cols; i++)
-        m->data[i] = 0;
-    return m;
+// Initiate new zero MATRIX 
+MATRIX* newMatrix(int nRows, int nCols) {
+    MATRIX* matrix = (MATRIX*) malloc(sizeof(MATRIX));
+    matrix->nRows = nRows;
+    matrix->nCols = nCols;
+    matrix->data = (int**) malloc(nRows * sizeof(int*));
+    for (int i = 0; i < nRows; i++) {
+        matrix->data[i] = (int*) calloc(nCols, sizeof(int));
+    }
+    return matrix;
 }
 
-
-
-void printMatrix(matrix m, int rank){
+void printMatrix(MATRIX * m, int rank){
+    printf("matrix rows: %d, matrix cols: %d\n", m->nRows, m->nCols);
     if(mode == VERBOSE || rank == MASTER){
-        for(int i = 0; i < m.rows; i++){
-            for(int j = 0; j < m.cols; j++){
-                printf("%d ", m.data[i][j]);
+        for(int i = 0; i < m->nRows; i++){
+            for(int j = 0; j < m->nCols; j++){
+                printf("%d ", m->data[i][j]);
             }
             printf("\n");
         }
@@ -90,83 +84,179 @@ void printMatrix(matrix m, int rank){
     }
 }
 
-
-//to review
-// void SumMatrixMaster(matrix mA, matrix mB, int rank){
-//     matrix result;
-//     if(mode == VERBOSE || rank == MASTER){
-//         for(int i = 0; i < mA.rows; i++){
-//             for(int j = 0; j < mA.cols; j++){
-//                 result.data[i][j] = mA.data[i][j] + mB.data[i][j];
-//             }
-//         }
-//         printMatrix(result, mode, rank);
-//     }
-//     else if(mode == SILENT){
-//         for(int i = 0; i < mA.rows; i++){
-//             for(int j = 0; j < mA.cols; j++){
-//                 result.data[i][j] = mA.data[i][j] + mB.data[i][j];
-//             }
-//         }
-//         return result;
-//     }
-// }
-
-
-
-// master and slave code
-void masterCode (){
-        
-    //create matrix A and get number of rows and cols
-    matrixArows = fgetc(input);
-    matrixAcolums = fgetc(input);
-    matrixA = newMatrix(matrixArows,matrixAcolums);
-
-
-    //create matrix B and get number of rows and cols
-    matrixBrows = fgetc(input);
-    matrixBcolums = fgetc(input);
-    matrixB = newMatrix(matrixBrows,matrixBcolums);
-
-    //get data from file to matrix A
-    for (i = 0; i< matrixArows; i++){
-        for (j = 0; j < matrixAcolums; j++){
-            matrixA.data[i][j] = fgetc(input);
-        }
+void sumaVert (int col, int rank){
+    int i;
+    int *buffer = (int*) malloc(matrixA->nRows * sizeof(int));
+    for (i = 0; i < matrixA->nRows; i++){
+        buffer[i] = matrixA->data[i][col] + matrixB->data[i][col];
     }
+    MPI_Send(&buffer, 1, MPI_INT, MASTER, TAG, MPI_COMM_WORLD);
+}
 
-    //get data from file to matrix B
-    for (i = 0; i< matrixBrows; i++){
-        for (j = 0; j < matrixBcolums; j++){
-            matrixB.data[i][j] = fgetc(input);
-        }
+void sumaHoriz (int row, int rank){
+    int i;
+    int *buffer = (int*) malloc(matrixA->nCols * sizeof(int));
+    for (i = 0; i < matrixA->nCols; i++){
+        buffer[i] = matrixA->data[row][i] + matrixB->data[row][i];
     }
+    MPI_Send(&buffer, 1, MPI_INT, MASTER, TAG, MPI_COMM_WORLD);
+}
 
+void multVert (int col, int rank){
     
 
-    //send data to slaves
-    //receive data from slaves
-    //print data
-    
+}
 
+void multHoriz (int row, int rank){
+   
 
 }
 
 
-void slaveCode(){
-    //recibe data from master
-    
-    
-    //do operation
-    switch (operation)
-    {
-        case SUMA:
-            
-        break;
-        case MULTIPLICACION:
 
-        break;
+
+
+// master and slave code
+void masterCode (int me, int allwe, int whoami){
+    
+    //create MATRIX A and get number of rows and cols
+    scanf("%i", &matrixArows);
+    scanf("%i", &matrixAcolums);
+    matrixA = newMatrix(matrixArows,matrixAcolums);
+
+    int num;
+
+    //create MATRIX B and get number of rows and cols
+    scanf("%i", &matrixBrows);
+    scanf("%i", &matrixBcolums);
+    matrixB = newMatrix(matrixBrows,matrixBcolums);
+
+    //initiate MATRIX auxiliar to return result
+    if (operation == SUMA){
+        matrixAux = newMatrix(matrixArows,matrixAcolums);
     }
+    else if (operation == MULTIPLICACION){
+        matrixAux = newMatrix(matrixArows,matrixBcolums);
+    }
+
+    //get data from file to MATRIX A
+    for (int i = 0; i < matrixArows; i++){
+        for (int j = 0; j < matrixAcolums; j++){
+             scanf("%d",&matrixA->data[i][j]);
+            printf("NUMERO: %i",matrixA->data[i][j]);
+        }
+    }
+
+    //get data from file to MATRIX B
+    for (int i = 0; i < matrixBrows; i++){
+        for (int j = 0; j < matrixBcolums; j++){
+            scanf("%d",&matrixB->data[i][j] );
+            printf("NUMERO: %d",matrixB->data[i][j]);
+        }
+    }
+
+    if (mode == VERBOSE){
+        //print MATRIX A
+        printf("Matrix A initialize as:\n");
+        printMatrix(matrixA, MASTER);
+        //print MATRIX B
+        printf("Matrix B initialize as:\n");
+        printMatrix(matrixB, MASTER);
+    }
+
+
+    //send data to slaves
+    if (operation == SUMA){}
+
+    else if (operation == MULTIPLICACION){}
+
+    else{
+        printf("operation not valid\n");
+    }
+
+
+
+    //receive data from slaves
+    if (operation == SUMA){
+        int *buffer = (int*) malloc(matrixA->nRows * sizeof(int));
+        int index;
+        for (int i = 1, index = 0; i <= allwe && index < matrixAux->nRows; i++, index++){
+            MPI_Send(&index, 1, MPI_INT, i, TAG, MPI_COMM_WORLD);
+            MPI_Recv(&buffer, 1, MPI_INT, i, TAG, MPI_COMM_WORLD, &status);
+            if (partition == HORIZONTAL){
+                for (int j = 0; j < matrixAux->nCols; j++){
+                    matrixAux->data[index][j] = buffer[j];
+                }
+            }
+            else if (partition == VERTICAL){
+                for (int j = 0; j < matrixAux->nRows; j++){
+                    matrixAux->data[j][index] = buffer[j];
+                }
+            }
+            
+            if (i == allwe - 1) {i = 1;} //reset process iterator to initial value
+        }
+        
+    } 
+       
+    else if (operation == MULTIPLICACION){
+        for (int i = 1; i < allwe; i++ ){
+            
+        }
+
+    }
+
+   
+
+   
+
+
+    //print final matrix
+  
+    if (mode == VERBOSE){
+        printf("Matrix result:\n");
+        printMatrix(matrixAux, whoami);
+    }
+    else if (mode == SILENT){
+        printMatrix(matrixAux, whoami);
+    }
+    else{
+        printf("mode not valid\n");
+    }
+
+}
+
+
+void slaveCode(int me, int allwe, int whoami){
+    // recibe data from master
+    // data: operation, partition, column/row to operate
+    // MPI_Recv();
+    
+    
+
+    //do operation
+    if (operation == SUMA){
+        if (partition == VERTICAL){
+            int column;
+            MPI_Recv(&column, 1, MPI_INT, MASTER, TAG, MPI_COMM_WORLD, &status);
+            sumaVert(column, whoami);
+        }
+        else if (partition == HORIZONTAL){
+            int row;
+            MPI_Recv(&row, 1, MPI_INT, MASTER, TAG, MPI_COMM_WORLD, &status);
+            sumaHoriz(row, whoami);
+        }
+    }
+
+    else if (operation == MULTIPLICACION){
+        if (partition == VERTICAL){
+            
+        }
+        else if (partition == HORIZONTAL){
+            
+        }
+    }
+
 
 
     //send data to master
@@ -178,6 +268,14 @@ void slaveCode(){
 void main (int argc, char *argv[]) {
     
     input = stdin;
+    char processor_name[MPI_MAX_PROCESSOR_NAME];
+    int me, allwe, whoami;
+
+    MPI_Init(&argc,&argv);
+    MPI_Comm_size(MPI_COMM_WORLD,&allwe);
+    MPI_Comm_rank(MPI_COMM_WORLD,&whoami);
+    MPI_Get_processor_name(processor_name,&me);
+    printf("Process [%d] Alive on %s\n",whoami,processor_name);
 
 
     //recibe tipo particion de matrices
@@ -200,28 +298,13 @@ void main (int argc, char *argv[]) {
     }else if(argv[2] == 'V'){
         mode = VERBOSE;
     }
+    if (whoami == MASTER) {
+        masterCode(me, allwe, whoami);    
+    }
 
-<<<<<<< HEAD
-    //recibe file from bash arguments
-    fp = fopen(argv[1], "r");
+    else {
+        slaveCode(me, allwe, whoami);
+    }
 
-    
-    if (fp == NULL)
-        exit(EXIT_FAILURE);
-=======
->>>>>>> 7606dde5331b265c2e38c27f1552d2bee93240c1
-
-
-
-
-
-    // if (whoami == MASTER) {
-    //     //master code
-    //     masterCode();    
-    // }
-
-    // else {
-    //     //slave code
-    //     slaveCode();
-    // }
+    MPI_Finalize();
 }
