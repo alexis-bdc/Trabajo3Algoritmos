@@ -20,6 +20,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <mpi.h>
 
 #define MASTER 0
@@ -118,7 +119,7 @@ void multHoriz (int row, int rank){
 
 // master and slave code
 void masterCode (int me, int allwe, int whoami){
-    
+    int slaves = allwe - 1;
 
     //initiate MATRIX auxiliar to return result
     if (operation == SUMA){
@@ -139,50 +140,86 @@ void masterCode (int me, int allwe, int whoami){
     }
 
 
-    //send data to slaves
-    if (operation == SUMA){}
-
-    else if (operation == MULTIPLICACION){}
-
-    else{
-        printf("operation not valid\n");
-    }
-
-
-
     //receive data from slaves
-    if (operation == SUMA){
+    if (operation == SUMA && matrixA->nCols == matrixB->nCols && matrixA->nRows == matrixB->nRows){
         int *buffer = (int*) malloc(matrixA->nRows * sizeof(int));
-        int index;
-        for (int i = 1, index = 0; i <= allwe && index < matrixAux->nRows; i++, index++){
-            MPI_Send(&index, 1, MPI_INT, i, TAG, MPI_COMM_WORLD);
+        int indexs[allwe-1];
+        printf("initiate SUMA\n");
+        
+        // how many rows do every slave have to work with
+        int i = 0;
+        for (i; i < matrixAcolums%slaves ; i++){ indexs[i] = matrixA->nCols/slaves+1; }
+        for (i; i <= slaves-1 ; i++) {indexs[i] = matrixA->nCols/slaves; }
+
+        // print indexs
+        // if (mode == VERBOSE){
+        //     printf("indexs: ");
+        //     for (int i = 0; i < slaves; i++){
+        //         printf("%d ", indexs[i]);
+        //     }
+        //     printf("\n");
+        // }
+
+        //send data to slaves
+
+        int index_pos = 0;
+        for (int i = 1; i <= slaves; i++){
+            printf("call slave %d\n", i);
+            for (int j = 0; j < indexs[i]; j++){
+                MPI_Send(&index_pos, 1, MPI_INT, i, TAG, MPI_COMM_WORLD);
+                index_pos++;
+            }
+        }
+
+        for (int i = 1; i < allwe; i++){
             MPI_Recv(&buffer, 1, MPI_INT, i, TAG, MPI_COMM_WORLD, &status);
             if (partition == HORIZONTAL){
-                for (int j = 0; j < matrixAux->nCols; j++){
+                int index = i - 1;
+                for (int j = 0; j < matrixA->nCols; j++){
                     matrixAux->data[index][j] = buffer[j];
                 }
             }
             else if (partition == VERTICAL){
-                for (int j = 0; j < matrixAux->nRows; j++){
+                int index = i - 1;
+                for (int j = 0; j < matrixA->nRows; j++){
                     matrixAux->data[j][index] = buffer[j];
                 }
             }
-            
-            if (i == allwe - 1) {i = 1;} //reset process iterator to initial value
         }
-        
+
+
+
+        // for (int i = 1, index = 0; i <= allwe && index < matrixAux->nRows; i++, index++){
+        //     MPI_Send(&index, 1, MPI_INT, i, TAG, MPI_COMM_WORLD);
+        //     MPI_Recv(&buffer, 1, MPI_INT, i, TAG, MPI_COMM_WORLD, &status);
+        //     if (partition == HORIZONTAL){
+        //         for (int j = 0; j < matrixAux->nCols; j++){
+        //             matrixAux->data[index][j] = buffer[j];
+        //         }
+        //     }
+        //     else if (partition == VERTICAL){
+        //         for (int j = 0; j < matrixAux->nRows; j++){
+        //             matrixAux->data[j][index] = buffer[j];
+        //         }
+        //     }
+            
+        //     if (i == allwe - 1) {i = 1;} //reset process iterator to initial value
+        // }
+        free(buffer);        
     } 
-       
-    else if (operation == MULTIPLICACION){
+    else { printf("Matrices no compatibles para la suma\n"); }
+
+
+
+    if (operation == MULTIPLICACION && matrixAcolums == matrixBrows){
         for (int i = 1; i < allwe; i++ ){
             
         }
 
     }
 
-   
+    else { printf("Matrices no compatibles para la multiplicacion\n"); }
 
-   
 
 
     //print final matrix
@@ -194,25 +231,21 @@ void masterCode (int me, int allwe, int whoami){
     else if (mode == SILENT){
         printMatrix(matrixAux, whoami);
     }
-    else{
-        printf("mode not valid\n");
-    }
 
 }
 
 
 void slaveCode(int me, int allwe, int whoami){
     // recibe data from master
-    // data: operation, partition, column/row to operate
-    // MPI_Recv();
+    // data column/row to operate
     
-    
-
     //do operation
     if (operation == SUMA){
+        printf("slave %d doing SUMA\n", whoami);
         if (partition == VERTICAL){
             int column;
             MPI_Recv(&column, 1, MPI_INT, MASTER, TAG, MPI_COMM_WORLD, &status);
+            printf("slave %d recibe column index: %d\n", whoami, column);
             sumaVert(column, whoami);
         }
         else if (partition == HORIZONTAL){
@@ -233,7 +266,6 @@ void slaveCode(int me, int allwe, int whoami){
 
 
 
-    //send data to master
 }
 
 
@@ -245,25 +277,68 @@ void main (int argc, char *argv[]) {
     
     char processor_name[MPI_MAX_PROCESSOR_NAME];
     int me, allwe, whoami;
+
+    MPI_Init(&argc,&argv);
+    MPI_Comm_size(MPI_COMM_WORLD,&allwe);
+    MPI_Comm_rank(MPI_COMM_WORLD,&whoami);
+    MPI_Get_processor_name(processor_name,&me);
+    printf("Process [%d] Alive on %s\n",whoami,processor_name);
+
+    //argv[] = {partition, operation, mode}
+    if (argc == 4){
+        if (strcmp(argv[1], "V") == 0){
+            partition = VERTICAL;
+        }
+        else if (strcmp(argv[1], "H") == 0){
+            partition = HORIZONTAL;
+        }
+        else{
+            printf("partition not valid\n");
+        }
+        if (strcmp(argv[2], "S") == 0){
+            operation = SUMA;
+        }
+        else if (strcmp(argv[2], "M") == 0){
+            operation = MULTIPLICACION;
+        }
+        else{
+            printf("operation not valid\n");
+        }
+        if (strcmp(argv[3], "V") == 0){
+            mode = VERBOSE;
+        }
+        else if (strcmp(argv[3], "S") == 0){
+            mode = SILENT;
+        }
+        else{
+            printf("mode not valid\n");
+        }
+    }
+    else{
+        printf("Error: not enough arguments\n");
+        exit(1);
+    }
+    //print execution partition, operation, mode
+    //printf("partition: %d, operation: %d, mode: %d\n", partition, operation, mode);
+
+
     //create MATRIX A and get number of rows and cols
     scanf("%i", &matrixArows);
     scanf("%i", &matrixAcolums);
     matrixA = newMatrix(matrixArows,matrixAcolums);
-    printf("ORDEN: %d x %d \n",matrixArows,matrixAcolums);
-
-    int num;
+    //printf("ORDEN: %d x %d \n",matrixArows,matrixAcolums);
 
     //create MATRIX B and get number of rows and cols
     scanf("%i", &matrixBrows);
     scanf("%i", &matrixBcolums);
     matrixB = newMatrix(matrixBrows,matrixBcolums);
-    printf("ORDEN: %d x %d \n",matrixBrows,matrixBcolums);
+    //printf("ORDEN: %d x %d \n",matrixBrows,matrixBcolums);
 
     //get data from file to MATRIX A
     for (int i = 0; i < matrixArows; i++){
         for (int j = 0; j < matrixAcolums; j++){
-             scanf("%d",&matrixA->data[i][j]);
-            printf("NUMERO: %i",matrixA->data[i][j]);
+            scanf("%d",&matrixA->data[i][j]);
+            //printf("NUMERO: %i",matrixA->data[i][j]);
         }
     }
 
@@ -271,37 +346,13 @@ void main (int argc, char *argv[]) {
     for (int i = 0; i < matrixBrows; i++){
         for (int j = 0; j < matrixBcolums; j++){
             scanf("%d",&matrixB->data[i][j] );
-            printf("NUMERO: %d",matrixB->data[i][j]);
+            //printf("NUMERO: %d",matrixB->data[i][j]);
         }
     }
-    MPI_Init(&argc,&argv);
-    MPI_Comm_size(MPI_COMM_WORLD,&allwe);
-    MPI_Comm_rank(MPI_COMM_WORLD,&whoami);
-    MPI_Get_processor_name(processor_name,&me);
-    printf("Process [%d] Alive on %s\n",whoami,processor_name);
-
+    
     
 
-    //recibe tipo particion de matrices
-    if(argv[4] == 'H'){
-        partition = HORIZONTAL;
-    }else if(argv[4] == 'V'){
-        partition = VERTICAL;
-    }
 
-    //recibe operacion a realizar
-    if(argv[3] == 'S'){
-        operation = SUMA;
-    }else if(argv[3] == 'M'){
-        operation = MULTIPLICACION;
-    }
-
-    //recibe modo de ejecucion
-    if(argv[2] == 'S'){
-        mode = SILENT;
-    }else if(argv[2] == 'V'){
-        mode = VERBOSE;
-    }
     if (whoami == MASTER) {
         masterCode(me, allwe, whoami);    
     }
