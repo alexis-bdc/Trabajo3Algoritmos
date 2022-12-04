@@ -24,6 +24,7 @@
 #include <mpi.h>
 
 #define MASTER 0
+#define TAG 1
 
 #define SUMA 0
 #define MULTIPLICACION 1
@@ -82,6 +83,35 @@ void printMatrix(MATRIX * m, int rank){
     }
 }
 
+void sumaVert (int col, int rank){
+    int i;
+    int *buffer = (int*) malloc(matrixA->nRows * sizeof(int));
+    for (i = 0; i < matrixA->nRows; i++){
+        buffer[i] = matrixA[i][col] + matrixB[i][col];
+    }
+    MPI_Send(&buffer, 1, MPI_INT, MASTER, TAG, MPI_COMM_WORLD);
+}
+
+void sumaHoriz (int row, int rank){
+    int i;
+    int *buffer = (int*) malloc(matrixA->nCols * sizeof(int));
+    for (i = 0; i < matrixA->nCols; i++){
+        buffer[i] = matrixA[row][i] + matrixB[row][i];
+    }
+    MPI_Send(&buffer, 1, MPI_INT, MASTER, TAG, MPI_COMM_WORLD);
+}
+
+void multVert (int col, int rank){
+    
+
+}
+
+void multHoriz (int row, int rank){
+   
+
+}
+
+
 
 //to review
 // void SumMatrixMaster(MATRIX mA, MATRIX mB, int rank){
@@ -120,6 +150,14 @@ void masterCode (int me, int allwe, int whoami){
     int matrixBcolums = fgetc(input);
     matrixB = newMatrix(matrixBrows,matrixBcolums);
 
+    //initiate MATRIX auxiliar to return result
+    if (operation == SUMA){
+        matrixAux = newMatrix(matrixArows,matrixAcolums);
+    }
+    else if (operation == MULTIPLICACION){
+        matrixAux = newMatrix(matrixArows,matrixBcolums);
+    }
+
     //get data from file to MATRIX A
     for (int i = 0; i < matrixArows; i++){
         for (int j = 0; j < matrixAcolums; j++){
@@ -157,7 +195,37 @@ void masterCode (int me, int allwe, int whoami){
 
 
     //receive data from slaves
+    if (operation == SUMA){
+        if (partition == HORIZONTAL){
+            for (int i = 1; i < allwe; i++){
+                MPI_Send();
+                MPI_Recv();
+            }
+        }
+        else if (partition == VERTICAL){
+            for (int i = 1; i < allwe; i++){
+                MPI_Send();
+                MPI_Recv();
+            }
+        }
+    }
 
+    else if (operation == MULTIPLICACION){
+        if (partition == HORIZONTAL){
+            for (int i = 1; i < allwe; i++){
+                MPI_Send();
+                MPI_Recv();
+            }
+        }
+        else if (partition == VERTICAL){
+            for (int i = 1; i < allwe; i++){
+                MPI_Send();
+                MPI_Recv();
+            }
+        }
+    }
+
+   
 
 
     //print final matrix
@@ -177,9 +245,12 @@ void masterCode (int me, int allwe, int whoami){
 
 
 void slaveCode(int me, int allwe, int whoami){
-    //recibe data from master
+    // recibe data from master
+    // data: operation, partition, column/row to operate
     // MPI_Recv();
     
+    
+
     //do operation
     switch (operation)
     {
