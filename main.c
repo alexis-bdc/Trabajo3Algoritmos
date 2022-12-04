@@ -6,6 +6,7 @@
         Entrega:        4 Diciembre 2022
         compilacion:    mpicc main.c -o t3.exe
         Ejecucion:      mpirun -np K ./t3.exe -p -o -m < data.txt
+                        mpirun -np 3 ./t3.exe V S V < data.txt
                         K: numero de nodos | numero de procesos
                         p: particion de matrices | como se reparten desde el archivo {H,V}
                         o: operacion a realizar {S,M}
@@ -117,7 +118,11 @@ void multHoriz (int row, int rank){
 
 // master and slave code
 void masterCode (int me, int allwe, int whoami){
-        
+    
+    printf("master started\n");
+    printf("Confirmacion de parametros: %d %d %d\n", partition, operation, mode);
+
+
     //create MATRIX A and get number of rows and cols
     int matrixArows = fgetc(input);
     int matrixAcolums = fgetc(input);
@@ -161,19 +166,12 @@ void masterCode (int me, int allwe, int whoami){
     }
 
 
-    //send data to slaves
-    if (operation == SUMA){}
-
-    else if (operation == MULTIPLICACION){}
-
-    else{
-        printf("operation not valid\n");
-    }
+    
 
 
-
-    //receive data from slaves
-    if (operation == SUMA){
+    //make summation
+    
+    if (operation == SUMA && matrixArows == matrixBrows && matrixAcolums == matrixBcolums){
         int *buffer = (int*) malloc(matrixA->nRows * sizeof(int));
         int index;
         for (int i = 1, index = 0; i <= allwe && index < matrixAux->nRows; i++, index++){
@@ -193,13 +191,21 @@ void masterCode (int me, int allwe, int whoami){
             if (i == allwe - 1) {i = 1;} //reset process iterator to initial value
         }
         
-    } 
+    }
+    else {
+        printf("Error: matrices are not compatible for summation\n");
+    }
+
+    //make multiplication
        
-    else if (operation == MULTIPLICACION){
+    if (operation == MULTIPLICACION && matrixAcolums == matrixBrows){
         for (int i = 1; i < allwe; i++ ){
             
         }
 
+    }
+    else {
+        printf("Error: matrices are not compatible for multiplication\n");
     }
 
    
@@ -273,27 +279,35 @@ void main (int argc, char *argv[]) {
     MPI_Get_processor_name(processor_name,&me);
     printf("Process [%d] Alive on %s\n",whoami,processor_name);
 
-
-    //recibe tipo particion de matrices
-    if(argv[4] == 'H'){
-        partition = HORIZONTAL;
-    }else if(argv[4] == 'V'){
-        partition = VERTICAL;
+    //argv[] = {partition, operation, mode}
+    if (argc == 4){
+        partition = atoi(argv[1]);
+        operation = atoi(argv[2]);
+        mode = atoi(argv[3]);
+    }
+    else{
+        printf("Error: not enough arguments\n");
+        exit(1);
     }
 
-    //recibe operacion a realizar
-    if(argv[3] == 'S'){
-        operation = SUMA;
-    }else if(argv[3] == 'M'){
-        operation = MULTIPLICACION;
-    }
-
-    //recibe modo de ejecucion
-    if(argv[2] == 'S'){
-        mode = SILENT;
-    }else if(argv[2] == 'V'){
-        mode = VERBOSE;
-    }
+    // //recibe tipo particion de matrices
+    // if(argv[1] == "H"){
+    //     partition = HORIZONTAL;
+    // }else if(argv[1] == "V"){
+    //     partition = VERTICAL;
+    // }
+    // //recibe operacion a realizar
+    // if(argv[2] == "S"){
+    //     operation = SUMA;
+    // }else if(argv[2] == "M"){
+    //     operation = MULTIPLICACION;
+    // }
+    // //recibe modo de ejecucion
+    // if(argv[3] == 'S'){
+    //     mode = SILENT;
+    // }else if(argv[3] == 'V'){
+    //     mode = VERBOSE;
+    // }
 
     if (whoami == MASTER) {
         masterCode(me, allwe, whoami);    
