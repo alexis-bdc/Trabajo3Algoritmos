@@ -6,7 +6,6 @@
         Entrega:        4 Diciembre 2022
         compilacion:    mpicc main.c -o t3.exe
         Ejecucion:      mpirun -np K ./t3.exe -p -o -m < data.txt
-                        mpirun -np 3 ./t3.exe V S V < data.txt
                         K: numero de nodos | numero de procesos
                         p: particion de matrices | como se reparten desde el archivo {H,V}
                         o: operacion a realizar {S,M}
@@ -21,6 +20,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <mpi.h>
 
 #define MASTER 0
@@ -91,7 +91,7 @@ void sumaVert (int col, int rank){
     for (i = 0; i < matrixA->nRows; i++){
         buffer[i] = matrixA->data[i][col] + matrixB->data[i][col];
     }
-    MPI_Send(&buffer, 1, MPI_INT, MASTER, TAG, MPI_COMM_WORLD);
+    MPI_Send(&buffer, matrixA->nRows, MPI_INT, MASTER, TAG, MPI_COMM_WORLD);
 }
 
 void sumaHoriz (int row, int rank){
@@ -100,7 +100,7 @@ void sumaHoriz (int row, int rank){
     for (i = 0; i < matrixA->nCols; i++){
         buffer[i] = matrixA->data[row][i] + matrixB->data[row][i];
     }
-    MPI_Send(&buffer, 1, MPI_INT, MASTER, TAG, MPI_COMM_WORLD);
+    MPI_Send(&buffer, matrixA->nCols, MPI_INT, MASTER, TAG, MPI_COMM_WORLD);
 }
 
 void multVert (int col, int rank){
@@ -119,22 +119,7 @@ void multHoriz (int row, int rank){
 
 // master and slave code
 void masterCode (int me, int allwe, int whoami){
-    
-    printf("master started\n");
-    printf("Confirmacion de parametros: %d %d %d\n", partition, operation, mode);
-
-
-    //create MATRIX A and get number of rows and cols
-    scanf("%i", &matrixArows);
-    scanf("%i", &matrixAcolums);
-    matrixA = newMatrix(matrixArows,matrixAcolums);
-
-    int num;
-
-    //create MATRIX B and get number of rows and cols
-    scanf("%i", &matrixBrows);
-    scanf("%i", &matrixBcolums);
-    matrixB = newMatrix(matrixBrows,matrixBcolums);
+    int slaves = allwe - 1;
 
     //initiate MATRIX auxiliar to return result
     if (operation == SUMA){
@@ -144,21 +129,6 @@ void masterCode (int me, int allwe, int whoami){
         matrixAux = newMatrix(matrixArows,matrixBcolums);
     }
 
-    //get data from file to MATRIX A
-    for (int i = 0; i < matrixArows; i++){
-        for (int j = 0; j < matrixAcolums; j++){
-             scanf("%d",&matrixA->data[i][j]);
-            printf("NUMERO: %i",matrixA->data[i][j]);
-        }
-    }
-
-    //get data from file to MATRIX B
-    for (int i = 0; i < matrixBrows; i++){
-        for (int j = 0; j < matrixBcolums; j++){
-            scanf("%d",&matrixB->data[i][j] );
-            printf("NUMERO: %d",matrixB->data[i][j]);
-        }
-    }
 
     if (mode == VERBOSE){
         //print MATRIX A
@@ -170,51 +140,75 @@ void masterCode (int me, int allwe, int whoami){
     }
 
 
-    
-
-
-    //make summation
-    
-    if (operation == SUMA && matrixArows == matrixBrows && matrixAcolums == matrixBcolums){
+    //receive data from slaves
+    if (operation == SUMA && matrixA->nCols == matrixB->nCols && matrixA->nRows == matrixB->nRows){
         int *buffer = (int*) malloc(matrixA->nRows * sizeof(int));
-        int index;
-        for (int i = 1, index = 0; i <= allwe && index < matrixAux->nRows; i++, index++){
-            MPI_Send(&index, 1, MPI_INT, i, TAG, MPI_COMM_WORLD);
-            MPI_Recv(&buffer, 1, MPI_INT, i, TAG, MPI_COMM_WORLD, &status);
+        int indexs[allwe-1];
+        printf("initiate SUMA\n");
+        
+        // how many rows do every slave have to work with
+        int i = 0;
+        for (i; i < matrixAcolums%slaves ; i++){ indexs[i] = matrixA->nCols/slaves+1; }
+        for (i; i <= slaves-1 ; i++) {indexs[i] = matrixA->nCols/slaves; }
+
+        // print indexs
+        // if (mode == VERBOSE){
+        //     printf("indexs: ");
+        //     for (int i = 0; i < slaves; i++){
+        //         printf("%d ", indexs[i]);
+        //     }
+        //     printf("\n");
+        // }
+
+        //send data to slaves
+
+        int index_pos = 0;
+        for (int i = 1; i <= slaves; i++){
+            //printf("call slave %d\n", i);
+            for (int j = 0; j < indexs[i]; j++){
+                MPI_Send(&index_pos, 1, MPI_INT, i, TAG, MPI_COMM_WORLD);
+                index_pos++;
+            }
+        }
+
+        printf("muere\n");
+
+        //receive data from slaves
+        for (int i = 1; i < allwe; i++){
             if (partition == HORIZONTAL){
-                for (int j = 0; j < matrixAux->nCols; j++){
+                MPI_Recv(&buffer, matrixA->nCols, MPI_INT, i, TAG, MPI_COMM_WORLD, &status);
+                int index = i - 1;
+                for (int j = 0; j < matrixA->nCols; j++){
                     matrixAux->data[index][j] = buffer[j];
                 }
             }
             else if (partition == VERTICAL){
-                for (int j = 0; j < matrixAux->nRows; j++){
+                MPI_Recv(&buffer, matrixA->nRows, MPI_INT, i, TAG, MPI_COMM_WORLD, &status);
+                int index = i - 1;
+                for (int j = 0; j < matrixA->nRows; j++){
                     matrixAux->data[j][index] = buffer[j];
                 }
             }
-            
-            if (i == allwe - 1) {i = 1;} //reset process iterator to initial value
         }
-        
-    }
-    else {
-        printf("Error: matrices are not compatible for summation\n");
-    }
 
-    //make multiplication
-       
+
+
+        
+        free(buffer);        
+    } 
+    else { printf("Matrices no compatibles para la suma\n"); }
+
+
+
     if (operation == MULTIPLICACION && matrixAcolums == matrixBrows){
         for (int i = 1; i < allwe; i++ ){
             
         }
 
     }
-    else {
-        printf("Error: matrices are not compatible for multiplication\n");
-    }
 
-   
+    else { printf("Matrices no compatibles para la multiplicacion\n"); }
 
-   
 
 
     //print final matrix
@@ -226,31 +220,26 @@ void masterCode (int me, int allwe, int whoami){
     else if (mode == SILENT){
         printMatrix(matrixAux, whoami);
     }
-    else{
-        printf("mode not valid\n");
-    }
 
 }
 
 
 void slaveCode(int me, int allwe, int whoami){
     // recibe data from master
-    // data: operation, partition, column/row to operate
-    // MPI_Recv();
-    
-    
+    // data column/row to operate
+    int index;
+    MPI_Recv(&index, 1, MPI_INT, MASTER, TAG, MPI_COMM_WORLD, &status);
 
+    printf("slave %d recibe index: %d\n", me, index);
     //do operation
+    
     if (operation == SUMA){
         if (partition == VERTICAL){
-            int column;
-            MPI_Recv(&column, 1, MPI_INT, MASTER, TAG, MPI_COMM_WORLD, &status);
-            sumaVert(column, whoami);
+            printf("slave %d recibe column index: %d\n", whoami, index);
+            sumaVert(index, whoami);
         }
         else if (partition == HORIZONTAL){
-            int row;
-            MPI_Recv(&row, 1, MPI_INT, MASTER, TAG, MPI_COMM_WORLD, &status);
-            sumaHoriz(row, whoami);
+            sumaHoriz(index, whoami);
         }
     }
 
@@ -265,7 +254,6 @@ void slaveCode(int me, int allwe, int whoami){
 
 
 
-    //send data to master
 }
 
 
@@ -273,7 +261,8 @@ void slaveCode(int me, int allwe, int whoami){
 //main
 void main (int argc, char *argv[]) {
     
-    input = stdin;
+    //input = stdin;
+    
     char processor_name[MPI_MAX_PROCESSOR_NAME];
     int me, allwe, whoami;
 
@@ -285,39 +274,78 @@ void main (int argc, char *argv[]) {
 
     //argv[] = {partition, operation, mode}
     if (argc == 4){
-        partition = atoi(argv[1]);
-        operation = atoi(argv[2]);
-        mode = atoi(argv[3]);
+        if (strcmp(argv[1], "V") == 0){
+            partition = VERTICAL;
+        }
+        else if (strcmp(argv[1], "H") == 0){
+            partition = HORIZONTAL;
+        }
+        else{
+            printf("partition not valid\n");
+        }
+        if (strcmp(argv[2], "S") == 0){
+            operation = SUMA;
+        }
+        else if (strcmp(argv[2], "M") == 0){
+            operation = MULTIPLICACION;
+        }
+        else{
+            printf("operation not valid\n");
+        }
+        if (strcmp(argv[3], "V") == 0){
+            mode = VERBOSE;
+        }
+        else if (strcmp(argv[3], "S") == 0){
+            mode = SILENT;
+        }
+        else{
+            printf("mode not valid\n");
+        }
     }
     else{
         printf("Error: not enough arguments\n");
         exit(1);
     }
+    fflush(stdout);
+    //print execution partition, operation, mode
+    //printf("partition: %d, operation: %d, mode: %d\n", partition, operation, mode);
 
-    // //recibe tipo particion de matrices
-    // if(argv[1] == "H"){
-    //     partition = HORIZONTAL;
-    // }else if(argv[1] == "V"){
-    //     partition = VERTICAL;
-    // }
-    // //recibe operacion a realizar
-    // if(argv[2] == "S"){
-    //     operation = SUMA;
-    // }else if(argv[2] == "M"){
-    //     operation = MULTIPLICACION;
-    // }
-    // //recibe modo de ejecucion
-    // if(argv[3] == 'S'){
-    //     mode = SILENT;
-    // }else if(argv[3] == 'V'){
-    //     mode = VERBOSE;
-    // }
 
-    if (whoami == MASTER) {
-        masterCode(me, allwe, whoami);    
+    //create MATRIX A and get number of rows and cols
+    scanf("%i", &matrixArows);
+    scanf("%i", &matrixAcolums);
+    matrixA = newMatrix(matrixArows,matrixAcolums);
+    fflush(stdout);
+
+    //create MATRIX B and get number of rows and cols
+    scanf("%i", &matrixBrows);
+    scanf("%i", &matrixBcolums);
+    matrixB = newMatrix(matrixBrows,matrixBcolums);
+    fflush(stdout);
+
+    //get data from file to MATRIX A
+    for (int i = 0; i < matrixArows; i++){
+        for (int j = 0; j < matrixAcolums; j++){
+            scanf("%d",&matrixA->data[i][j]);
+            fflush(stdout);
+        }
     }
 
+    //get data from file to MATRIX B
+    for (int i = 0; i < matrixBrows; i++){
+        for (int j = 0; j < matrixBcolums; j++){
+            scanf("%d",&matrixB->data[i][j] );
+            fflush(stdout);
+        }
+    }
+
+    if (whoami == MASTER) {
+        printf("MASTER\n");
+        masterCode(me, allwe, whoami);    
+    }
+    
     else {
+        printf("SLAVE %d\n", whoami);
         slaveCode(me, allwe, whoami);
     }
 
