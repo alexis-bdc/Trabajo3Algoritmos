@@ -51,8 +51,6 @@ typedef struct {
 }MATRIX;
 
 
-
-
 //global vars
 int partition;
 int operation;
@@ -307,6 +305,7 @@ void main (int argc, char *argv[]) {
     MPI_Get_processor_name(processor_name,&me);
     printf("Process [%d] Alive on %s\n",whoami,processor_name);
 
+
     //argv[] = {partition, operation, mode}
     if (argc == 4){
         if (strcmp(argv[1], "V") == 0){
@@ -345,8 +344,11 @@ void main (int argc, char *argv[]) {
     //print execution partition, operation, mode
     //printf("partition: %d, operation: %d, mode: %d\n", partition, operation, mode);
 
-    initMatrixs();
     
+    if (whoami == MASTER) { initMatrixs(); }
+
+    if (whoami != MASTER){ printf("Slave %d alive\n", whoami); }
+
     if (whoami == MASTER) {
         printf("MASTER\n");
         masterCode(me, allwe, whoami);    
